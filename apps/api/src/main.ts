@@ -1,16 +1,29 @@
-import * as express from 'express';
-import { Message } from '@ev3-dashboard/api-interfaces';
+import { v4 as uuidv4 } from 'uuid';
+import WebSocket, { WebSocketServer } from 'ws';
 
-const app = express();
+const clients = new Map();
+const wsServer = new WebSocketServer({ port: 8080 });
 
-const greeting: Message = { message: 'Welcome to api!' };
+wsServer.on('connection', (wsConnection) => {
+  const clientData = { id: uuidv4() };
+  clients.set(wsConnection, clientData);
+  console.log('Client connected: %s', clientData.id);
 
-app.get('/api', (req, res) => {
-  res.send(greeting);
+  // ONMESSAGE
+  wsConnection.on('message', (data, isBinary) => {
+    console.log('Data Received: %s', data);
+
+    wsServer.clients.forEach((client) => {
+      if (client !== wsConnection && client.readyState === WebSocket.OPEN) {
+        client.send(data, { binary: isBinary });
+      }
+    });
+  });
+
+  // ONCLOSE
+  wsConnection.on('close', () => {
+    const client = clients.get(wsConnection);
+    console.log('Client disconnected: %s', client.id);
+    clients.delete(wsConnection);
+  });
 });
-
-const port = process.env.port || 3333;
-const server = app.listen(port, () => {
-  console.log('Listening at http://localhost:' + port + '/api');
-});
-server.on('error', console.error);
